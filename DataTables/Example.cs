@@ -3,18 +3,18 @@
 public JsonResult GetData(DataTablesPostModel model)
 {
     string sortBy = "";
-    bool sortDir = true;
+    bool sortAsc = true;
 
     if (model.order != null)
     {
         sortBy = model.columns[model.order[0].column].data;
-        sortDir = model.order[0].dir.ToLower() == "asc";
+        sortAsc = model.order[0].dir.ToLower() == "asc";
     }
 
     var query = db.ModelName
         .AsNoTracking()
         .Search(model.columns, model.search, out int totalResultsCount, out int? filteredResultsCount)
-        .OrderBy(r => r.Id)
+        .OrderBy(sortBy, sortAsc)
         .Skip(model.start)
         .Take(model.length)
         .AsEnumerable();
