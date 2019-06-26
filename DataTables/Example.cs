@@ -8,7 +8,7 @@ public JsonResult GetData(DataTablesPostModel model)
     if (model.order != null)
     {
         sortBy = model.columns[model.order[0].column].data;
-		sortDir = string.Equals(model.order[0].dir, "asc", StringComparison.OrdinalIgnoreCase);
+        sortDir = string.Equals(model.order[0].dir, "asc", StringComparison.OrdinalIgnoreCase);
     }
 
     var query = db.ModelName
@@ -16,7 +16,7 @@ public JsonResult GetData(DataTablesPostModel model)
         .Search(model.columns, model.search, out int totalResultsCount, out int? filteredResultsCount)
         .OrderBy(sortBy, sortDir)
         .Skip(model.start)
-		.Take(model.length != -1 ? model.length : (filteredResultsCount ?? totalResultsCount))
+        .Take(model.length != -1 ? model.length : (filteredResultsCount ?? totalResultsCount))
         .AsEnumerable();
 
     return Json(new
