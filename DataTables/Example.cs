@@ -11,12 +11,12 @@ public JsonResult GetData(DataTablesPostModel model)
         sortDir = string.Equals(model.order[0].dir, "asc", StringComparison.OrdinalIgnoreCase);
     }
 
-    var query = db.ModelName
+    var query = db.DhpRegisters
         .AsNoTracking()
-        .Search(model.columns, model.search, out int totalResultsCount, out int? filteredResultsCount)
+        .Search(model.columns, model.search, out int totalResultsCount, out int filteredResultsCount)
         .OrderBy(sortBy, sortDir)
         .Skip(model.start)
-        .Take(model.length != -1 ? model.length : (filteredResultsCount ?? totalResultsCount))
+        .Take(model.length == -1 ? filteredResultsCount : model.length)
         .AsEnumerable();
 
     return Json(new
@@ -29,29 +29,56 @@ public JsonResult GetData(DataTablesPostModel model)
 }
 
 // Search Extension
-public static IQueryable<T> Search<T>(this IQueryable<T> query, List<Column> columns, Search search, out int totalResultsCount, out int? filteredResultsCount)
+public static IQueryable<T> Search<T>(this IQueryable<T> query, List<Column> columns, Search search, out int totalResultsCount, out int filteredResultsCount)
 {
     totalResultsCount = query.Count();
+    bool genericSearchIsRegex = search.regex == "true";
+    bool hasGenericSearch = !string.IsNullOrWhiteSpace(search.value) || genericSearchIsRegex;
+    int specificSearchCount = columns.Count(c => c.searchable && (!string.IsNullOrWhiteSpace(c.search.value) || c.search.regex == "true"));
 
-    if (string.IsNullOrWhiteSpace(search.value))
+    if (!hasGenericSearch && specificSearchCount == 0)
     {
-        filteredResultsCount = null;
+        filteredResultsCount = totalResultsCount;
         return query;
     }
 
     List<T> results = new List<T>();
 
-    foreach (var column in columns.Where(c => c.searchable))
+    foreach(var row in query)
     {
-        results.AddRange(query.ToList().Where(q => q
-                    .GetType()
-                    .GetProperty(column.data)
-                    ?.GetValue(q, null)
-                    ?.ToString()
-                    ?.ToLower()
-                    ?.Contains(search.value.ToLower())
-                    ?? false
-                ));
+        bool foundGeneric = !hasGenericSearch;
+        int foundSpecificCount = 0;
+        foreach (var column in columns.Where(c => c.searchable))
+        {
+            string value = row.GetType().GetProperty(column.data)?.GetValue(row, null)?.ToString()?.ToLower();
+            bool specificSearchIsRegex = column.search.regex == "true";
+
+            if (string.IsNullOrWhiteSpace(value) && (!genericSearchIsRegex && !specificSearchIsRegex))
+                continue;
+
+            if (hasGenericSearch && !foundGeneric)
+                foundGeneric = genericSearchIsRegex ? Regex.IsMatch(value ?? "", search.value, RegexOptions.IgnoreCase) : (value ?? "").Contains(search.value.ToLower());
+
+            if ((column.search.value != null && !specificSearchIsRegex) || specificSearchIsRegex)
+            {
+                if (specificSearchIsRegex)
+                {
+                    if (Regex.IsMatch(value ?? "", column.search.value, RegexOptions.IgnoreCase))
+                        foundSpecificCount++;
+                }
+                else
+                {
+                    if ((value ?? "").Contains(column.search.value.ToLower()))
+                        foundSpecificCount++;
+                }
+            }
+
+            if (foundGeneric && specificSearchCount == foundSpecificCount)
+            {
+                results.Add(row);
+                break;
+            }
+        }
     }
 
     filteredResultsCount = results.Count;
